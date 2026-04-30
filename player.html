@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MapMaker How To</title>
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    html, body {
+      width: 100%;
+      height: 100%;
+      background: #000000;
+      overflow: hidden;
+      font-family: 'Avenir Next', Avenir, 'Segoe UI', sans-serif;
+    }
+
+    /* Player container */
+    .player {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000000;
+    }
+    .player video {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    /* Controls overlay */
+    .controls {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: linear-gradient(to top, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0));
+      opacity: 0;
+      transition: opacity 0.25s ease;
+      pointer-events: none;
+    }
+    .player:hover .controls,
+    .controls.is-active,
+    .controls:focus-within {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    /* Buttons */
+    .btn {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      color: #ffffff;
+      font-family: inherit;
+      font-size: 13px;
+      padding: 6px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 36px;
+      height: 32px;
+    }
+    .btn:hover,
+    .btn:focus {
+      background: rgba(255, 204, 0, 0.18);
+      border-color: #FFCC00;
+      color: #FFCC00;
+      outline: none;
+    }
+    .btn svg {
+      width: 14px;
+      height: 14px;
+      fill: currentColor;
+    }
+
+    /* Speed selector — segmented control style */
+    .speeds {
+      display: inline-flex;
+      gap: 4px;
+      margin-left: auto;
+    }
+    .speed-btn {
+      background: transparent;
+      border: 1px solid rgba(255, 255, 255, 0.35);
+      color: #ffffff;
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 6px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+      height: 32px;
+      min-width: 40px;
+    }
+    .speed-btn:hover,
+    .speed-btn:focus {
+      background: rgba(255, 204, 0, 0.12);
+      border-color: rgba(255, 204, 0, 0.6);
+      color: #FFCC00;
+      outline: none;
+    }
+    .speed-btn.is-active {
+      background: #FFCC00;
+      border-color: #FFCC00;
+      color: #000000;
+    }
+
+    /* Error state — shown if no video parameter or load fails */
+    .error {
+      color: #ffffff;
+      font-size: 14px;
+      padding: 24px;
+      text-align: center;
+      max-width: 500px;
+    }
+    .error code {
+      background: rgba(255, 255, 255, 0.1);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-family: 'Courier New', monospace;
+    }
+  </style>
+</head>
+<body>
+  <div class="player" id="player">
+    <!-- video element is injected by JS once we know the source -->
+    <div class="controls" id="controls" hidden>
+      <!-- Play / Pause -->
+      <button class="btn" id="play-pause" aria-label="Play or pause" title="Play / Pause">
+        <svg id="icon-play" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M8 5v14l11-7z" />
+        </svg>
+        <svg id="icon-pause" viewBox="0 0 24 24" aria-hidden="true" style="display:none;">
+          <path d="M6 5h4v14H6zM14 5h4v14h-4z" />
+        </svg>
+      </button>
+
+      <!-- Restart -->
+      <button class="btn" id="restart" aria-label="Restart from beginning" title="Restart">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 5V2L7 7l5 5V8c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" />
+        </svg>
+      </button>
+
+      <!-- Fullscreen -->
+      <button class="btn" id="fullscreen" aria-label="Toggle fullscreen" title="Fullscreen">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" />
+        </svg>
+      </button>
+
+      <!-- Speed selector -->
+      <div class="speeds" role="group" aria-label="Playback speed">
+        <button class="speed-btn" data-speed="0.5">0.5×</button>
+        <button class="speed-btn is-active" data-speed="1">1×</button>
+        <button class="speed-btn" data-speed="1.5">1.5×</button>
+        <button class="speed-btn" data-speed="2">2×</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // -----------------------------------------------------------------------
+    // Resolve video source from URL parameter
+    // -----------------------------------------------------------------------
+    // Accepts ?video=basemaps.mp4 or ?video=basemaps (we'll add the .mp4)
+    // Videos are expected to live at the root of the same GitHub Pages site.
+
+    const params = new URLSearchParams(window.location.search);
+    let videoName = params.get('video');
+
+    const playerEl = document.getElementById('player');
+    const controlsEl = document.getElementById('controls');
+
+    if (!videoName) {
+      playerEl.innerHTML =
+        '<div class="error">' +
+          'No video specified. Add <code>?video=&lt;filename&gt;</code> to the URL ' +
+          '(for example <code>player.html?video=basemaps.mp4</code>).' +
+        '</div>';
+    } else {
+      // Allow ?video=basemaps as a shorthand
+      if (!/\.mp4$/i.test(videoName)) {
+        videoName = videoName + '.mp4';
+      }
+
+      // -----------------------------------------------------------------------
+      // Build the video element
+      // -----------------------------------------------------------------------
+      const video = document.createElement('video');
+      video.src = videoName;
+      video.autoplay = true;
+      video.loop = true;
+      video.muted = true;
+      video.playsInline = true;
+      // Preload metadata so we can size things correctly without buffering whole file
+      video.preload = 'metadata';
+
+      // Insert before the controls overlay so the controls sit on top
+      playerEl.insertBefore(video, controlsEl);
+      controlsEl.hidden = false;
+
+      // -----------------------------------------------------------------------
+      // Play / Pause
+      // -----------------------------------------------------------------------
+      const playPauseBtn = document.getElementById('play-pause');
+      const iconPlay = document.getElementById('icon-play');
+      const iconPause = document.getElementById('icon-pause');
+
+      function refreshPlayPauseIcon() {
+        if (video.paused) {
+          iconPlay.style.display = '';
+          iconPause.style.display = 'none';
+        } else {
+          iconPlay.style.display = 'none';
+          iconPause.style.display = '';
+        }
+      }
+      playPauseBtn.addEventListener('click', () => {
+        if (video.paused) {
+          video.play();
+        } else {
+          video.pause();
+        }
+      });
+      video.addEventListener('play', refreshPlayPauseIcon);
+      video.addEventListener('pause', refreshPlayPauseIcon);
+
+      // Click anywhere on the video itself to toggle play/pause too
+      video.addEventListener('click', () => {
+        if (video.paused) {
+          video.play();
+        } else {
+          video.pause();
+        }
+      });
+
+      // -----------------------------------------------------------------------
+      // Restart
+      // -----------------------------------------------------------------------
+      document.getElementById('restart').addEventListener('click', () => {
+        video.currentTime = 0;
+        video.play();
+      });
+
+      // -----------------------------------------------------------------------
+      // Fullscreen
+      // -----------------------------------------------------------------------
+      document.getElementById('fullscreen').addEventListener('click', () => {
+        const target = playerEl;
+        if (document.fullscreenElement) {
+          document.exitFullscreen();
+        } else if (target.requestFullscreen) {
+          target.requestFullscreen();
+        } else if (target.webkitRequestFullscreen) {
+          target.webkitRequestFullscreen();
+        }
+      });
+
+      // -----------------------------------------------------------------------
+      // Playback speed
+      // -----------------------------------------------------------------------
+      const speedButtons = document.querySelectorAll('.speed-btn');
+      speedButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const newRate = parseFloat(btn.dataset.speed);
+          video.playbackRate = newRate;
+          speedButtons.forEach((b) => b.classList.remove('is-active'));
+          btn.classList.add('is-active');
+        });
+      });
+
+      // -----------------------------------------------------------------------
+      // Auto-fade: keep controls visible briefly after any interaction so
+      // users can hit speed/restart in quick succession without the bar
+      // disappearing under their cursor.
+      // -----------------------------------------------------------------------
+      let fadeTimer;
+      function pokeControls() {
+        controlsEl.classList.add('is-active');
+        clearTimeout(fadeTimer);
+        fadeTimer = setTimeout(() => {
+          controlsEl.classList.remove('is-active');
+        }, 2200);
+      }
+      playerEl.addEventListener('mousemove', pokeControls);
+      playerEl.addEventListener('touchstart', pokeControls);
+      controlsEl.addEventListener('click', pokeControls);
+    }
+  </script>
+</body>
+</html>
