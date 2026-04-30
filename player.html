@@ -37,7 +37,12 @@
       display: block;
     }
 
-    /* Controls overlay */
+    /* Controls overlay.
+       Default state is HIDDEN (opacity 0). Several conditions reveal it:
+       - .is-active class added by JS (initial show, hover, interaction)
+       - Direct hover on the player container
+       - Keyboard focus inside the controls
+    */
     .controls {
       position: absolute;
       bottom: 0;
@@ -49,7 +54,7 @@
       padding: 10px 14px;
       background: linear-gradient(to top, rgba(0, 0, 0, 0.85), rgba(0, 0, 0, 0));
       opacity: 0;
-      transition: opacity 0.25s ease;
+      transition: opacity 0.4s ease;
       pointer-events: none;
     }
     .player:hover .controls,
@@ -289,17 +294,31 @@
       });
 
       // -----------------------------------------------------------------------
-      // Auto-fade: keep controls visible briefly after any interaction so
-      // users can hit speed/restart in quick succession without the bar
-      // disappearing under their cursor.
+      // Controls visibility behaviour
       // -----------------------------------------------------------------------
+      // Show controls for an initial period when the player loads so the
+      // student sees they exist, then fade out. Any interaction (mouse move,
+      // touch, control click) brings them back for another window of time.
+
+      const INITIAL_VISIBLE_MS = 3500;   // how long controls stay up at start
+      const ACTIVE_VISIBLE_MS = 2200;    // how long controls stay up after interaction
+
       let fadeTimer;
-      function pokeControls() {
+      function showControls(durationMs) {
         controlsEl.classList.add('is-active');
         clearTimeout(fadeTimer);
         fadeTimer = setTimeout(() => {
           controlsEl.classList.remove('is-active');
-        }, 2200);
+        }, durationMs);
+      }
+
+      // Initial reveal — slightly delayed so it lines up with the page settling
+      // and the video starting to play.
+      setTimeout(() => showControls(INITIAL_VISIBLE_MS), 200);
+
+      // Re-show on any interaction
+      function pokeControls() {
+        showControls(ACTIVE_VISIBLE_MS);
       }
       playerEl.addEventListener('mousemove', pokeControls);
       playerEl.addEventListener('touchstart', pokeControls);
